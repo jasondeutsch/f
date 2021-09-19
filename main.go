@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -15,6 +14,13 @@ func main() {
 		panic(err)
 	}
 	defer os.Remove(file.Name())
+
+	if len(os.Args) > 1 {
+		_, err := file.WriteString(strings.Join(os.Args[1:], " "))
+		if err != nil {
+			panic(err)
+		}
+	}
 
 	if err := runEditor(file.Name()); err != nil {
 		panic(err)
@@ -31,7 +37,7 @@ func main() {
 
 	name, args := prepare(string(b))
 
-	execAndPipe(name, args)
+	execAndWait(name, args)
 }
 
 func prepare(s string) (string, []string) {
@@ -51,24 +57,17 @@ func runEditor(path string) error {
 	return cmd.Run()
 }
 
-func execAndPipe(name string, args []string) {
+func execAndWait(name string, args []string) {
 	cmd := exec.Command(name, args...)
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		panic(err)
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		panic(err)
-	}
 
-	err = cmd.Start()
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	err := cmd.Start()
 	if err != nil {
 		panic(err)
 	}
 
 	defer cmd.Wait()
-
-	go io.Copy(os.Stdout, stdout)
-	go io.Copy(os.Stderr, stderr)
 }
