@@ -33,6 +33,14 @@ ls \
             expectName: "ls",
 			expectArgs: []string{"-la"},
 		},
+		{
+			contents: `
+ls \
+       -la
+`,
+			expectName: "ls",
+			expectArgs: []string{"-la"},
+		},
 	}
 
 	for _, tc := range tt {
@@ -53,6 +61,5 @@ func stringSliceEqual(a, b []string) bool {
 			return false
 		}
 	}
-
 	return true
 }

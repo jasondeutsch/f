@@ -27,23 +27,36 @@ func main() {
 	}
 
 	b, err := os.ReadFile(file.Name())
-	if b == nil {
-		fmt.Println("noop")
-		os.Exit(0)
-	}
 	if err != nil {
 		panic(err)
 	}
 
 	name, args := prepare(string(b))
+	if len(name) == 0 {
+		fmt.Println("noop")
+		os.Exit(0)
+	}
 
 	execAndWait(name, args)
 }
 
 func prepare(s string) (string, []string) {
+	s = collapse(s)
 	s = clean(s)
 	slc := strings.Split(s, " ")
 	return slc[0], slc[1:]
+}
+
+// convert multiline commands (e.g. `\`) to single line
+func collapse(s string) string {
+	var sb strings.Builder
+	for  i, v := range s {
+		if (v == '\\'  && s[i+1] == '\n') || v == '\n' {
+			continue
+		}
+		sb.WriteRune(v)
+	}
+	return sb.String()
 }
 
 func clean(s string) string {
