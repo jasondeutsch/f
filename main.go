@@ -15,12 +15,12 @@ import (
       a. tempfile for current command
       b. log of commands in single file
    2. support other editors
-   3. implement --help
    4. figure out how to paste to prompt instead of just executing
 */
 
 func main() {
-	flags()
+	opts := flags()
+
 	file, err := ioutil.TempFile("/tmp", "f.*.sh")
 	if err != nil {
 		panic(err)
@@ -28,7 +28,15 @@ func main() {
 	defer os.Remove(file.Name())
 
 	if len(os.Args) > 1 {
-		_, err := file.WriteString(strings.Join(os.Args[1:], " "))
+		skipFlags := ""
+		for _, v := range os.Args[1:] {
+			if v[0] == '-' {
+				continue
+			}
+			skipFlags += " " + v
+		}
+		skipFlags = strings.TrimLeft(skipFlags, " ")
+		_, err := file.WriteString(skipFlags)
 		if err != nil {
 			panic(err)
 		}
@@ -43,6 +51,11 @@ func main() {
 		panic(err)
 	}
 
+	if opts.DryRun {
+		fmt.Println(string(b))
+		os.Exit(0)
+	}
+
 	name, args := prepare(string(b))
 	if len(name) == 0 {
 		fmt.Println("noop")
@@ -52,19 +65,32 @@ func main() {
 	execAndWait(name, args)
 }
 
-func flags() {
+type options struct {
+	DryRun bool
+}
+
+func flags() options {
 	// get flags
 	helpFlag := flag.Bool("help", false, "print usage information")
-	helpFlagShort := flag.Bool("h", false, "print usage information")
+	helpFlagShort := flag.Bool("h", false, "print usage information (shorthand)")
+	dryrunFlag := flag.Bool("dry-run", false, "print command without execution")
 
 	flag.Parse()
 
 	// handle flags
-	if (helpFlag != nil && *helpFlag) ||
+	if (*helpFlag) ||
 		(helpFlagShort != nil && *helpFlagShort) {
 		fmt.Print(help)
 		os.Exit(0)
 	}
+
+	var opts options
+
+	if *dryrunFlag {
+		opts.DryRun = true
+	}
+
+	return opts
 }
 
 func prepare(s string) (string, []string) {
