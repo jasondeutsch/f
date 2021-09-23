@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/exec"
 	"strings"
@@ -11,21 +12,38 @@ import (
 
 /*
    TODOS:
-   1. write to files in /usr/local/var/f/
-      a. tempfile for current command
-      b. log of commands in single file
    2. support other editors
    4. figure out how to paste to prompt instead of just executing
+   5. remove panics, handle errors
+   6. enforce opts before text
+   7. main() is getting bloated...
 */
 
+const (
+	logPath = "/usr/local/var/f"
+	logFile = "flog"
+)
+
+type options struct {
+	DryRun     bool
+	CmdLogName string
+}
+
 func main() {
+	setup()
 	opts := flags()
 
-	file, err := ioutil.TempFile("/tmp", "f.*.sh")
+	file, err := ioutil.TempFile(logPath, "temp.*.sh")
 	if err != nil {
 		panic(err)
 	}
-	defer os.Remove(file.Name())
+	defer func() {
+		// not working
+		err = os.Remove(file.Name())
+		if err != nil {
+			log.Println(fmt.Sprintf("error removing temp file: %v", err))
+		}
+	}()
 
 	if len(os.Args) > 1 {
 		skipFlags := ""
@@ -51,45 +69,87 @@ func main() {
 		panic(err)
 	}
 
-	if opts.DryRun {
-		fmt.Println(string(b))
-		os.Exit(0)
-	}
-
 	name, args := prepare(string(b))
 	if len(name) == 0 {
 		fmt.Println("noop")
 		os.Exit(0)
 	}
 
+	err = writeLog(opts.CmdLogName, string(b))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if opts.DryRun {
+		fmt.Println(string(b))
+		os.Exit(0)
+	}
 	execAndWait(name, args)
 }
 
-type options struct {
-	DryRun bool
+func writeLog(name, cmd string) error {
+	// If the file doesn't exist, create it, or append to the file
+	file, err := os.OpenFile(logPath+"/"+logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	_, err = file.WriteString("--- " + name + "\n" + cmd)
+	return err
+}
+
+func setup() {
+	if _, err := os.Stat(logPath); os.IsNotExist(err) {
+		if err := os.Mkdir(logPath, os.ModePerm); err != nil {
+			panic(err)
+		}
+	}
 }
 
 func flags() options {
 	// get flags
 	helpFlag := flag.Bool("help", false, "print usage information")
 	helpFlagShort := flag.Bool("h", false, "print usage information (shorthand)")
-	dryrunFlag := flag.Bool("dry-run", false, "print command without execution")
+	dryRunFlag := flag.Bool("dry-run", false, "print command without execution")
+	historyFlag := flag.Bool("history", false, "print command log")
+	cmdLogNameFlag := flag.String("log", "", "label command and save to f's history")
+	cmdLogNameFlagShort := flag.String("l", "", "label command and save to f's history (shorthand)")
 
 	flag.Parse()
 
 	// handle flags
-	if (*helpFlag) ||
-		(helpFlagShort != nil && *helpFlagShort) {
+	if *helpFlag || *helpFlagShort {
 		fmt.Print(help)
 		os.Exit(0)
 	}
 
-	var opts options
-
-	if *dryrunFlag {
-		opts.DryRun = true
+	if *historyFlag {
+		// lazy...
+		// What? this is not enterprise software.
+		// This will error if logFile not exists.
+		cmd := exec.Command("cat", logPath+"/"+logFile)
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		_ = cmd.Run()
+		os.Exit(0)
 	}
 
+	var opts options
+	max := func(a, b string) string {
+		if len(b) > len(a) {
+			return b
+		}
+		return a
+	}
+	if n := max(*cmdLogNameFlag, *cmdLogNameFlagShort); n != "" {
+		opts.CmdLogName = n
+	}
+
+	if *dryRunFlag {
+		opts.DryRun = true
+		opts.CmdLogName = strings.Join([]string{opts.CmdLogName, "(dry-run)"}, " ")
+	}
 	return opts
 }
 
@@ -134,7 +194,6 @@ func execAndWait(name string, args []string) {
 	if err != nil {
 		panic(err)
 	}
-
 	defer cmd.Wait()
 }
 
@@ -143,7 +202,7 @@ Usage: f
    or: f [options] [text] Open editor with text provided e.g. f !! to open with last command
 
 Options:
-  -n, --name    Save command by name.	
+  -l, --label   Label command and write to log.	
   --history     Print command history (only named commands are saved).
   --dry-run     Print command without execution.
 `
