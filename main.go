@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -8,7 +9,18 @@ import (
 	"strings"
 )
 
+/*
+   TODOS:
+   1. write to files in /usr/local/var/f/
+      a. tempfile for current command
+      b. log of commands in single file
+   2. support other editors
+   3. implement --help
+   4. figure out how to paste to prompt instead of just executing
+*/
+
 func main() {
+	flags()
 	file, err := ioutil.TempFile("/tmp", "f.*.sh")
 	if err != nil {
 		panic(err)
@@ -40,6 +52,21 @@ func main() {
 	execAndWait(name, args)
 }
 
+func flags() {
+	// get flags
+	helpFlag := flag.Bool("help", false, "print usage information")
+	helpFlagShort := flag.Bool("h", false, "print usage information")
+
+	flag.Parse()
+
+	// handle flags
+	if (helpFlag != nil && *helpFlag) ||
+		(helpFlagShort != nil && *helpFlagShort) {
+		fmt.Print(help)
+		os.Exit(0)
+	}
+}
+
 func prepare(s string) (string, []string) {
 	s = collapse(s)
 	s = clean(s)
@@ -50,8 +77,8 @@ func prepare(s string) (string, []string) {
 // convert multiline commands (e.g. `\`) to single line
 func collapse(s string) string {
 	var sb strings.Builder
-	for  i, v := range s {
-		if (v == '\\'  && s[i+1] == '\n') || v == '\n' {
+	for i, v := range s {
+		if (v == '\\' && s[i+1] == '\n') || v == '\n' {
 			continue
 		}
 		sb.WriteRune(v)
@@ -84,3 +111,13 @@ func execAndWait(name string, args []string) {
 
 	defer cmd.Wait()
 }
+
+const help = `
+Usage: f  
+   or: f [options] [text] Open editor with text provided e.g. f !! to open with last command
+
+Options:
+  -n, --name    Save command by name.	
+  --history     Print command history (only named commands are saved).
+  --dry-run     Print command without execution.
+`

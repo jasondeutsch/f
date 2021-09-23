@@ -6,22 +6,22 @@ import (
 
 func TestPrepare(t *testing.T) {
 	tt := []struct {
-		contents string
+		contents   string
 		expectName string
 		expectArgs []string
 	}{
 		{
-			contents: "ls",
+			contents:   "ls",
 			expectName: "ls",
 			expectArgs: nil,
 		},
 		{
-			contents: " ls ",
+			contents:   " ls ",
 			expectName: "ls",
 			expectArgs: nil,
 		},
 		{
-			contents: " ls -la",
+			contents:   " ls -la",
 			expectName: "ls",
 			expectArgs: []string{"-la"},
 		},
@@ -30,7 +30,7 @@ func TestPrepare(t *testing.T) {
 ls \
 -la
 `,
-            expectName: "ls",
+			expectName: "ls",
 			expectArgs: []string{"-la"},
 		},
 		{
